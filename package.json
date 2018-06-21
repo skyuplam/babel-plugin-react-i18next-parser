@@ -1,0 +1,27 @@
+{
+  "name": "babel-plugin-i18next-parser",
+  "version": "0.1.0",
+  "description": "A babel plugin to extract i18n message from React components that use React-i18next.",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "author": "Terrence Lam <skyuplam@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/parser": "^7.0.0-beta.51",
+    "lodash": "^4.17.10",
+    "vfile": "^3.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.0.0-beta.51",
+    "@babel/preset-env": "^7.0.0-beta.51",
+    "@babel/preset-react": "^7.0.0-beta.51",
+    "babel-jest": "^23.0.1",
+    "babel-preset-env": "^1.7.0",
+    "babel-preset-react": "^6.24.1",
+    "jest": "^23.1.0",
+    "memory-fs": "^0.4.1",
+    "regenerator-runtime": "^0.11.1"
+  }
+}
