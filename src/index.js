@@ -5,11 +5,12 @@ import _ from 'lodash';
 import printMessage from './printMessage';
 
 const KEY_PROP = 'i18nKey';
+const PLURAL_PROP = 'count';
+const PLURAL_KEY_SUFFIX = '_plural';
 const DEFAULT_NS_SEPERATOR = ':';
 const DEFAULT_NS_KEY = 'defaultNS';
 const REACT_TRANSLATE_FUNC_NAME = 'translate';
 const TRANSLATE_FUNC_NAME = 't';
-const DESCRIPTOR_PROPS = new Set([KEY_PROP]);
 const EXTRACTED = Symbol('ReactI18nextExtracted');
 const MESSAGES = Symbol('ReactI18nextMessages');
 const NAMESPACES = Symbol('ReactI18nextNamespaces');
@@ -21,6 +22,7 @@ const FUNCTION_NAMES = [
   REACT_TRANSLATE_FUNC_NAME,
   TRANSLATE_FUNC_NAME,
 ];
+
 
 export default function ({ types: t }) {
   function evaluatePath(path) {
@@ -48,11 +50,17 @@ export default function ({ types: t }) {
     return propPaths.reduce((hash, [keyPath, valuePath]) => {
       const key = getMessageDescriptorKey(keyPath);
 
-      if (DESCRIPTOR_PROPS.has(key)) {
-        hash[key] = valuePath;
+      switch (key) {
+        case KEY_PROP: {
+          return { ...hash, [key]: valuePath };
+        }
+        case PLURAL_PROP: {
+          return { ...hash, plural: true };
+        }
+        default: {
+          return hash;
+        }
       }
-
-      return hash;
     }, {});
   }
 
@@ -96,12 +104,13 @@ export default function ({ types: t }) {
   }
 
   function evaluateMessageDescriptor(descriptor, children) {
-    Object.keys(descriptor).forEach(key => {
-      const valuePath = descriptor[key];
-      descriptor[key] = getMessageDescriptorValue(valuePath);
-    });
+    const evaluatedDescriptor = _.reduce(descriptor,
+      (hash, value, key) => ({
+        ...hash,
+        [key]: key === KEY_PROP ? getMessageDescriptorValue(value) : value,
+      }), {});
 
-    return { ...descriptor, defaultValue: printMessage(children) };
+    return { ...evaluatedDescriptor, defaultValue: printMessage(children) };
   }
 
   function getRelativeLoc(path, { file }) {
@@ -276,15 +285,16 @@ export default function ({ types: t }) {
       const messages = [...file.get(MESSAGES).values()].reduce((hash, descriptor) => {
         const { namespace, key } = decodeID(descriptor[KEY_PROP],
           file, namespaceSeperator);
-        if (key) {
-          _.set(hash, `${namespace}.${key}`, descriptor.defaultValue);
-        } else {
-          if (!hash[namespace]) {
-            hash[namespace] = {};
-          }
-          hash[namespace][descriptor.defaultValue] = descriptor.defaultValue;
-        }
-        return hash;
+
+        const single = key ? _.set({}, key, descriptor.defaultValue) :
+          { [descriptor.defaultValue]: descriptor.defaultValue };
+
+        const plural = key ?
+          _.set({}, `${key}${PLURAL_KEY_SUFFIX}`, descriptor.defaultValue) :
+          { [`${descriptor.defaultValue}${PLURAL_KEY_SUFFIX}`]: descriptor.defaultValue };
+
+        return _.merge({}, hash,
+          { [namespace]: descriptor.plural ? _.merge({}, single, plural) : single });
       }, {});
 
       locales.forEach(locale => {
