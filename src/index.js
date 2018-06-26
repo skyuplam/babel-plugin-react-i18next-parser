@@ -290,7 +290,10 @@ export default function ({ types: t }) {
       locales.forEach(locale => {
         _.forEach(messages, (value, namespace) => {
           const filename = p.join(process.cwd(), output, locale, `${namespace}.json`);
-          const fileContent = JSON.stringify(value, null, 2);
+          const oldContent = fs.existsSync(filename) ?
+            JSON.parse(fs.readFileSync(filename, 'UTF-8')) : {};
+          const newContent = _.merge({}, value, oldContent);
+          const fileContent = JSON.stringify(newContent, null, 2);
           fs.writeFileSync(filename, fileContent);
         });
       });

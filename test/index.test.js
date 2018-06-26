@@ -35,13 +35,30 @@ describe('emit assets for: ', () => {
 
     it(`output match: ${caseName}`, () => {
       const fixtureDir = path.join(fixturesDir, caseName);
+      const output = `test/fixtures/${caseName}/${BASE_OPTIONS.output}`;
+      const outputDir = path.join(process.cwd(), output);
+
+      // Sync translation dir to virtual FS
+      if (fs.existsSync(outputDir)) {
+        // Load the existing translation to virtual FS
+        fs.readdirSync(outputDir).forEach(lng => {
+          // Sync translation directories
+          const lngDir = path.join(outputDir, lng);
+          mFs.mkdirpSync(lngDir);
+
+          // Sync Files
+          fs.readdirSync(lngDir).forEach(filename => {
+            const filepath = path.join(lngDir, filename);
+            const file = fs.readFileSync(filepath, 'UTF-8');
+            mFs.writeFileSync(filepath, file);
+          });
+        });
+      }
 
       // Transform
-      transform(path.join(fixtureDir, 'actual.js'), {
-        output: `${caseName}/${BASE_OPTIONS.output}` });
+      transform(path.join(fixtureDir, 'actual.js'), { output });
 
       // Check the output
-      const outputDir = path.join(process.cwd(), caseName, BASE_OPTIONS.output);
       expect(() => mFs.statSync(outputDir).isDirectory)
         .not.toThrow();
 
