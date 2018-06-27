@@ -6,11 +6,19 @@ import printMessage from './printMessage';
 
 const KEY_PROP = 'i18nKey';
 const PLURAL_PROP = 'count';
-const PLURAL_KEY_SUFFIX = '_plural';
+const CONTEXT_PROP = 'context';
+const DEFAULT_VALUE_PROP = 'defaultValue';
+const EVALUABLE_PROPS = new Set([
+  KEY_PROP,
+  CONTEXT_PROP,
+  DEFAULT_VALUE_PROP,
+]);
+const PLURAL_KEY_SUFFIX = 'plural';
 const DEFAULT_NS_SEPERATOR = ':';
 const DEFAULT_NS_KEY = 'defaultNS';
-const REACT_TRANSLATE_FUNC_NAME = 'translate';
-const TRANSLATE_FUNC_NAME = 't';
+const REACT_TRANSLATE_HOC_FUNC = 'translate'; // `translate` HOC
+const TRANSLATE_FUNC_NAME = 't'; // i18next `t` function
+const FALLBAK_KEY = 'fallback';
 const EXTRACTED = Symbol('ReactI18nextExtracted');
 const MESSAGES = Symbol('ReactI18nextMessages');
 const NAMESPACES = Symbol('ReactI18nextNamespaces');
@@ -19,7 +27,7 @@ const COMPONENT_NAMES = [
   'Interpolate',
 ];
 const FUNCTION_NAMES = [
-  REACT_TRANSLATE_FUNC_NAME,
+  REACT_TRANSLATE_HOC_FUNC,
   TRANSLATE_FUNC_NAME,
 ];
 
@@ -42,6 +50,21 @@ export default function ({ types: t }) {
     return evaluatePath(path);
   }
 
+  function getMessageDescriptorValue(path) {
+    if (path.isJSXExpressionContainer()) {
+      path = path.get('expression');
+    }
+
+    // Always trim the Message Descriptor values.
+    const descriptorValue = evaluatePath(path);
+
+    if (typeof descriptorValue === 'string') {
+      return descriptorValue.trim();
+    }
+
+    return descriptorValue;
+  }
+
   function getChildren(path) {
     return path.container.children;
   }
@@ -50,17 +73,12 @@ export default function ({ types: t }) {
     return propPaths.reduce((hash, [keyPath, valuePath]) => {
       const key = getMessageDescriptorKey(keyPath);
 
-      switch (key) {
-        case KEY_PROP: {
-          return { ...hash, [key]: valuePath };
-        }
-        case PLURAL_PROP: {
-          return { ...hash, plural: true };
-        }
-        default: {
-          return hash;
-        }
+      if (EVALUABLE_PROPS.has(key)) {
+        return { ...hash, [key]: getMessageDescriptorValue(valuePath) };
+      } else if (key === PLURAL_PROP) {
+        return { ...hash, plural: true };
       }
+      return hash;
     }, {});
   }
 
@@ -88,29 +106,60 @@ export default function ({ types: t }) {
     return Boolean(path.node[EXTRACTED]);
   }
 
-  function getMessageDescriptorValue(path) {
-    if (path.isJSXExpressionContainer()) {
-      path = path.get('expression');
+  function evaluateTranslateKeyArg(keyPath, hash = {}) {
+    switch (keyPath.type) {
+      case 'BinaryExpression':
+      case 'StringLiteral': {
+        return { ...hash, [KEY_PROP]: evaluatePath(keyPath) };
+      }
+      case 'ArrayExpression': {
+        const evaluated = evaluatePath(keyPath);
+        return evaluated.reduce((ks, k, idx) => ({
+          ...ks,
+          [idx ? `${FALLBAK_KEY}-${idx}` : KEY_PROP]: k,
+        }), {});
+      }
+      default:
+        return hash;
     }
-
-    // Always trim the Message Descriptor values.
-    const descriptorValue = evaluatePath(path);
-
-    if (typeof descriptorValue === 'string') {
-      return descriptorValue.trim();
-    }
-
-    return descriptorValue;
   }
 
-  function evaluateMessageDescriptor(descriptor, children) {
-    const evaluatedDescriptor = _.reduce(descriptor,
-      (hash, value, key) => ({
-        ...hash,
-        [key]: key === KEY_PROP ? getMessageDescriptorValue(value) : value,
-      }), {});
+  function evaluateTranslationOptsArg(optPath, hash = {}) {
+    switch (optPath.type) {
+      case 'StringLiteral': {
+        return { ...hash, defaultValue: evaluatePath(optPath) };
+      }
+      case 'ObjectExpression': {
+        const properties = optPath.get('properties');
+        const descriptor = createMessageDescriptor(
+          properties.map(prop => [prop.get('key'), prop.get('value')]));
+        return { ...hash, ...descriptor };
+      }
+      default: {
+        return hash;
+      }
+    }
+  }
 
-    return { ...evaluatedDescriptor, defaultValue: printMessage(children) };
+  function evaluateTranslationContextArg(contextPath, hash = {}) {
+    return { ...hash, context: evaluatePath(contextPath) };
+  }
+
+  function getMessageKeyValuePairs(descriptor) {
+    const { context, plural, defaultValue = '' } = descriptor;
+    const baseKey = descriptor[KEY_PROP] || defaultValue;
+    const fallbackKeys = _.keys(descriptor)
+      .filter(k => k.indexOf(FALLBAK_KEY) !== -1)
+      .map(k => descriptor[k]);
+    const keys = new Set([
+      baseKey,
+      [baseKey, context].filter(k => k).join('_'),
+      [baseKey, context, plural ? PLURAL_KEY_SUFFIX : '']
+        .filter(k => k).join('_'),
+    ]);
+
+    return [...keys, ...fallbackKeys]
+      .map(key => ({ key, defaultValue }));
   }
 
   function getRelativeLoc(path, { file }) {
@@ -122,18 +171,11 @@ export default function ({ types: t }) {
 
   function storeMessage(descriptor, path, { file }) {
     const messages = file.get(MESSAGES);
-    const id = descriptor[KEY_PROP] || descriptor.defaultValue;
+    const kvs = getMessageKeyValuePairs(descriptor);
 
-    if (messages.has(id)) {
-      const msg = messages.get(id);
-      if (msg.defaultValue !== descriptor.defaultValue) {
-        throw path.buildCodeFrameError(
-          `[React i18next] Message with same ID but different value:\n ${msg}\n ${descriptor}`);
-      }
-    }
-
-    messages.set(id,
-      { ...descriptor, loc: getRelativeLoc(path, { file }) });
+    _.forEach(kvs, kv => {
+      messages.set(kv.key, { ...kv, loc: getRelativeLoc(path, { file }) });
+    });
   }
 
   function storeNamespace(id, namespace, path, state) {
@@ -189,10 +231,9 @@ export default function ({ types: t }) {
             .filter(attr => attr.isJSXAttribute());
           const descriptor = createMessageDescriptor(
             attributes.map(attr => [attr.get('name'), attr.get('value')]));
-          const evaluatedDescriptor = evaluateMessageDescriptor(descriptor,
-            getChildren(path));
+          const defaultValue = printMessage(getChildren(path));
 
-          storeMessage(evaluatedDescriptor, path, state);
+          storeMessage({ ...descriptor, defaultValue }, path, state);
         }
       },
       CallExpression(path, state) {
@@ -205,7 +246,7 @@ export default function ({ types: t }) {
           const argumentPaths = path.get('arguments');
           const calleeName = getCalleeName(path);
 
-          if (calleeName === REACT_TRANSLATE_FUNC_NAME) {
+          if (calleeName === REACT_TRANSLATE_HOC_FUNC) {
             if (!argumentPaths.length) {
               storeNamespace(DEFAULT_NS_KEY, opts.defaultNamespace, path, state);
             } else {
@@ -235,41 +276,31 @@ export default function ({ types: t }) {
           }
         }
 
-        const isTranslationFunction = (getCalleeName(path) === TRANSLATE_FUNC_NAME);
+        const isTranslationFunction = (
+          getCalleeName(path) === TRANSLATE_FUNC_NAME);
         if (isTranslationFunction) {
           const argPaths = path.get('arguments');
           const descriptor = argPaths.reduce((hash, arg, idx) => {
             switch (idx) {
               // Key argument
               case 0: {
-                switch (arg.type) {
-                  case 'StringLiteral': {
-                    return { ...hash, [KEY_PROP]: evaluatePath(arg) };
-                  }
-                  default:
-                    return hash;
-                }
+                return evaluateTranslateKeyArg(arg, hash);
               }
               // Options argument
               case 1: {
-                switch (arg.type) {
-                  case 'StringLiteral': {
-                    return { ...hash, defaultValue: evaluatePath(arg) };
-                  }
-                  default: {
-                    return hash;
-                  }
-                }
+                return evaluateTranslationOptsArg(arg, hash);
+              }
+              case 2: {
+                return evaluateTranslationContextArg(arg, hash);
               }
               default: {
                 return hash;
               }
             }
           }, {});
-          storeMessage({
-            ...descriptor,
-            defaultValue: descriptor.defaultValue || '',
-          }, path, state);
+
+          storeMessage({ ...descriptor, defaultValue: descriptor.defaultValue },
+            path, state);
         }
       },
     },
@@ -283,18 +314,13 @@ export default function ({ types: t }) {
       });
 
       const messages = [...file.get(MESSAGES).values()].reduce((hash, descriptor) => {
-        const { namespace, key } = decodeID(descriptor[KEY_PROP],
+        const { namespace, key } = decodeID(descriptor.key,
           file, namespaceSeperator);
 
         const single = key ? _.set({}, key, descriptor.defaultValue) :
           { [descriptor.defaultValue]: descriptor.defaultValue };
 
-        const plural = key ?
-          _.set({}, `${key}${PLURAL_KEY_SUFFIX}`, descriptor.defaultValue) :
-          { [`${descriptor.defaultValue}${PLURAL_KEY_SUFFIX}`]: descriptor.defaultValue };
-
-        return _.merge({}, hash,
-          { [namespace]: descriptor.plural ? _.merge({}, single, plural) : single });
+        return _.merge({}, hash, { [namespace]: single });
       }, {});
 
       locales.forEach(locale => {

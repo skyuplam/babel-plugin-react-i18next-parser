@@ -1,0 +1,24 @@
+{
+  "first": "",
+  "second": "this is a default message.",
+  "third": "default message",
+  "third_contextA": "default message",
+  "fourth": "default message",
+  "fifth": "{{var}} value",
+  "sixth": "",
+  "seventh": {
+    "first": "",
+    "fallbackA": "",
+    "fallbackB": ""
+  },
+  "eighth": {
+    "contextplural": "",
+    "contextplural_contextA": "",
+    "contextplural_contextA_plural": "",
+    "friend": "",
+    "friend_female": "",
+    "friend_male": "",
+    "friends": "",
+    "friends_plural": ""
+  }
+}
