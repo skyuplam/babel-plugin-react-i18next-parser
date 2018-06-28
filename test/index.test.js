@@ -12,7 +12,7 @@ const BASE_OPTIONS = {
   output: 'locales',
   locales: ['en', 'fr'],
   fs: mFs,
-  namespaceSeperator: ':',
+  namespaceSeparator: ':',
   defaultNamespace: 'react',
 };
 

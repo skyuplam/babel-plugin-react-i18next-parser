@@ -15,7 +15,6 @@ const EVALUABLE_PROPS = new Set([
   DEFAULT_VALUE_PROP,
 ]);
 const PLURAL_KEY_SUFFIX = 'plural';
-const DEFAULT_NS_SEPERATOR = ':';
 const DEFAULT_NS_KEY = 'defaultNS';
 const REACT_TRANSLATE_HOC_FUNC = 'translate'; // `translate` HOC
 const TRANSLATE_FUNC_NAME = 't'; // i18next `t` function
@@ -33,6 +32,15 @@ const FUNCTION_NAMES = [
   REACT_TRANSLATE_HOC_FUNC,
   TRANSLATE_FUNC_NAME,
 ];
+
+// Default Options
+const defaultOptions = {
+  output: 'locales',
+  defaultNamespace: 'translation',
+  namespaceSeparator: ':',
+  moduleSourceName: 'react-i18next',
+  locales: ['en'],
+};
 
 
 // eslint-disable-next-line no-unused-vars
@@ -216,7 +224,8 @@ export default function ({ types: t }) {
   function storeNamespaces(namespaces, path, state) {
     const { opts } = state;
     if (!namespaces.length) {
-      storeNamespace(DEFAULT_NS_KEY, opts.defaultNamespace, path, state);
+      storeNamespace(DEFAULT_NS_KEY,
+        opts.defaultNamespace || defaultOptions.defaultNamespace, path, state);
     } else {
       namespaces.forEach((ns, idx) => {
         storeNamespace(idx ? ns : DEFAULT_NS_KEY, ns, path, state);
@@ -224,16 +233,17 @@ export default function ({ types: t }) {
     }
   }
 
-  function decodeID(id, file, namespaceSeperator = DEFAULT_NS_SEPERATOR) {
+  function decodeID(id, file,
+    namespaceSeparator = defaultOptions.namespaceSeparator) {
     const namespaces = file.get(NAMESPACES);
-    const seperator = namespaceSeperator;
+    const separator = namespaceSeparator;
     const defaultNamespace = namespaces.get(DEFAULT_NS_KEY).namespace;
 
     if (!id) {
       return { namespace: defaultNamespace };
     }
 
-    const parts = id.split(seperator);
+    const parts = id.split(separator);
 
     if (parts.length <= 1) {
       return { namespace: defaultNamespace, key: id };
@@ -241,7 +251,7 @@ export default function ({ types: t }) {
 
     return {
       namespace: namespaces.get(parts[0]).namespace,
-      key: parts.slice(1).join(seperator),
+      key: parts.slice(1).join(separator),
     };
   }
 
@@ -344,7 +354,12 @@ export default function ({ types: t }) {
     post(file) {
       // Get the plugin Options
       const {
-        opts: { locales, output, fs = defaultFs, namespaceSeperator },
+        opts: {
+          locales = defaultOptions.locales,
+          output = defaultOptions.output,
+          fs = defaultFs,
+          namespaceSeperator = defaultOptions.namespaceSeperator,
+        },
       } = this;
 
       locales.forEach(locale => {
