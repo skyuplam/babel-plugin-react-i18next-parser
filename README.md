@@ -38,14 +38,16 @@ $ npm install -D babel-plugin-react-i18next-parser
 }
 ```
 ### Options
-+ `defaultNamespace`: `string`, `required`, the default namespace in your i18next options.
-  e.g. `defaultNS`
-+ `output`: `string`, `required`, the output folder name. The folder will be created under the root of project directory.
-  e.g. `locales`
-+ `locales`: `array`, `required`, the output locale folders created under the `output` directory
-  e.g. `['en', 'fr']`
-+ `namespaceSeperator`, `string`, the symbol to separate the namespace and key.
-  e.g. `':'`
++ `defaultNamespace`: `string`, `required`, the default namespace in your i18next options,
+  default: `translation`
++ `output`: `string`, the output folder name. The folder will be created under the root of project directory,
+  default: `locales`
++ `locales`: `array`, `required`, the output locale folders created under the `output` directory,
+  default: `['en']`
++ `namespaceSeparator`, `string`, the symbol to separate the namespace and key,
+  default: `':'`
++ `moduleSourceName`, `string`, the module source name to look for,
+  default: `react-i18next`
 
 
 # Inspirations
