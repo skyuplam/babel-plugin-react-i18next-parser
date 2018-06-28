@@ -1,5 +1,6 @@
 import * as p from 'path';
 import defaultFs from 'fs';
+import mkdirp from 'mkdirp';
 import _ from 'lodash';
 
 import printMessage from './printMessage';
@@ -51,7 +52,8 @@ export default function ({ types: t }) {
       return evaluated.value;
     }
     throw path.buildCodeFrameError(
-      '[React i18next] Messages must be statically evaluate-able for extraction.');
+      '[React i18next] Messages must be statically evaluate-able for extraction.',
+    );
   }
 
   function getPropKey(path) {
@@ -63,12 +65,11 @@ export default function ({ types: t }) {
   }
 
   function getPropValue(path) {
-    if (path.isJSXExpressionContainer()) {
-      path = path.get('expression');
-    }
+    const propPath = path.isJSXExpressionContainer()
+      ? path.get('expression') : path;
 
     // Always trim the Message Descriptor values.
-    const descriptorValue = evaluatePath(path);
+    const descriptorValue = evaluatePath(propPath);
 
     if (typeof descriptorValue === 'string') {
       return descriptorValue.trim();
@@ -87,9 +88,11 @@ export default function ({ types: t }) {
 
       if (EVALUABLE_PROPS.has(key)) {
         return { ...hash, [key]: getPropValue(valuePath) };
-      } else if (key === PLURAL_PROP) {
+      }
+      if (key === PLURAL_PROP) {
         return { ...hash, plural: true };
       }
+
       return hash;
     }, {});
   }
@@ -144,7 +147,8 @@ export default function ({ types: t }) {
       case 'ObjectExpression': {
         const properties = optPath.get('properties');
         const descriptor = createMessageDescriptor(
-          properties.map(prop => [prop.get('key'), prop.get('value')]));
+          properties.map(prop => [prop.get('key'), prop.get('value')]),
+        );
         return { ...hash, ...descriptor };
       }
       default: {
@@ -162,7 +166,8 @@ export default function ({ types: t }) {
       switch (propPath.type) {
         case 'FunctionExpression': {
           throw propPath.buildCodeFrameError(
-            '[React i18next] Function prop is not supported.');
+            '[React i18next] Function prop is not supported.',
+          );
         }
         case 'ArrayExpression': {
           return [...props, ...evaluatePath(propPath)];
@@ -362,11 +367,6 @@ export default function ({ types: t }) {
         },
       } = this;
 
-      locales.forEach(locale => {
-        const dir = p.join(process.cwd(), output, locale);
-        fs.mkdirpSync(dir);
-      });
-
       // Restructure messages with namespaces
       const messages = [...file.get(MESSAGES).values()]
         .reduce((hash, descriptor) => {
@@ -383,10 +383,13 @@ export default function ({ types: t }) {
 
       // Write files into each locale predefined in options
       locales.forEach(locale => {
+        const dir = p.join(process.cwd(), output, locale);
+        // Create the locale dir
+        mkdirp.sync(dir, { fs });
+
         _.forEach(messages, (value, namespace) => {
           // Use namespace as filename
-          const filename = p.join(process.cwd(), output,
-            locale, `${namespace}.json`);
+          const filename = p.join(dir, `${namespace}.json`);
 
           // Merge the old translations
           // Old translation always take priority

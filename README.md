@@ -2,7 +2,7 @@
 A babel plugin to extract i18n message from React components that use [react-i18next](https://github.com/i18next/react-i18next).
 
 # Features
-+ Supports i18next `t` translation function features:
++ Support i18next `t` translation function features:
   + [Interpolation](https://www.i18next.com/translation-function/interpolation)
   + [Formatting](https://www.i18next.com/translation-function/formatting)
   + [Plurals](https://www.i18next.com/translation-function/plurals),

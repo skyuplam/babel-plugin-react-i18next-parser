@@ -1,27 +1,51 @@
 {
-  "name": "babel-plugin-i18next-parser",
+  "name": "babel-plugin-react-i18next-parser",
   "version": "0.1.0",
   "description": "A babel plugin to extract i18n message from React components that use React-i18next.",
-  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/skyuplam/babel-plugin-react-i18next-parser"
+  },
+  "homepage": "https://github.com/skyuplam/babel-plugin-react-i18next-parser",
+  "main": "dist/babel-plugin-react-i18next-parser.cjs.js",
   "scripts": {
+    "prepare": "npm run build",
+    "prepublish": "npm run lint && npm run test",
+    "prebuild": "rm -rf dist/*",
+    "build": "rollup -c",
+    "lint": "eslint src",
     "test": "jest"
   },
+  "keywords": [
+    "babel-plugin",
+    "babel",
+    "i18next",
+    "react-i18next",
+    "extractor",
+    "parser"
+  ],
   "author": "Terrence Lam <skyuplam@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "@babel/parser": "^7.0.0-beta.51",
     "lodash": "^4.17.10",
+    "mkdirp": "^0.5.1",
     "vfile": "^3.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.0.0-beta.51",
     "@babel/preset-env": "^7.0.0-beta.51",
     "@babel/preset-react": "^7.0.0-beta.51",
-    "babel-jest": "^23.0.1",
-    "babel-preset-env": "^1.7.0",
-    "babel-preset-react": "^6.24.1",
+    "babel-core": "^7.0.0-0",
+    "babel-eslint": "^8.2.5",
+    "babel-jest": "^23.2.0",
+    "babel-plugin-external-helpers": "^6.22.0",
+    "eslint": "^5.0.1",
     "jest": "^23.1.0",
     "memory-fs": "^0.4.1",
-    "regenerator-runtime": "^0.11.1"
+    "regenerator-runtime": "^0.11.1",
+    "rollup": "^0.62.0",
+    "rollup-plugin-babel": "^4.0.0-beta.5",
+    "rollup-plugin-commonjs": "^9.1.3",
+    "rollup-plugin-node-resolve": "^3.3.0"
   }
 }
