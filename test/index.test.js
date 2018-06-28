@@ -65,14 +65,19 @@ describe('emit assets for: ', () => {
       mFs.readdirSync(outputDir).forEach(locale => {
         expect(BASE_OPTIONS.locales.indexOf(locale) !== -1).toBeTruthy();
 
-        // Read file outputs and compare the values
-        const messages = mFs.readFileSync(
-          path.join(outputDir, `${locale}/react.json`), 'UTF-8');
-        const expectedMessages = fs.readFileSync(
-          path.join(fixtureDir,
-            `expected/${BASE_OPTIONS.output}/${locale}/react.json`), 'UTF-8');
+        const localeDir = path.join(outputDir, locale);
 
-        expect(JSON.parse(messages)).toEqual(JSON.parse(expectedMessages));
+        // Read file outputs and compare the values
+        mFs.readdirSync(localeDir).forEach(file => {
+          const messages = mFs.readFileSync(
+            path.join(localeDir, file), 'UTF-8');
+          const expectedFilePath = path.join(fixtureDir,
+            `expected/${BASE_OPTIONS.output}/${locale}/${file}`);
+          const expectedMessages = fs.readFileSync(expectedFilePath, 'UTF-8');
+
+          expect(JSON.parse(messages))
+            .toEqual(JSON.parse(expectedMessages));
+        });
       });
     });
   });

@@ -27,6 +27,9 @@ class Test extends React.Component {
         <p>
           {t('eighth.contextplural', { context: 'contextA', count })}
         </p>
+        <p>
+          {t('ninth', { name: 'name', defaultValue: 'My name is {{name}}.' })}
+        </p>
       </div>
     )
   }

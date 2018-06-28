@@ -1,0 +1,9 @@
+{
+  "key": {
+    "from": {
+      "another": {
+        "namespace": ""
+      }
+    }
+  }
+}

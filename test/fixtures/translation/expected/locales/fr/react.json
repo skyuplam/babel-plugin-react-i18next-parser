@@ -20,5 +20,6 @@
     "friend_male": "",
     "friends": "",
     "friends_plural": ""
-  }
+  },
+  "ninth": "My name is {{name}}."
 }

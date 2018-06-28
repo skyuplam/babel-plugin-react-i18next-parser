@@ -8,6 +8,7 @@ const KEY_PROP = 'i18nKey';
 const PLURAL_PROP = 'count';
 const CONTEXT_PROP = 'context';
 const DEFAULT_VALUE_PROP = 'defaultValue';
+const NS_PROP = 'ns';
 const EVALUABLE_PROPS = new Set([
   KEY_PROP,
   CONTEXT_PROP,
@@ -22,9 +23,11 @@ const FALLBAK_KEY = 'fallback';
 const EXTRACTED = Symbol('ReactI18nextExtracted');
 const MESSAGES = Symbol('ReactI18nextMessages');
 const NAMESPACES = Symbol('ReactI18nextNamespaces');
+const NAMESPACE_COMPONENT = 'I18n';
 const COMPONENT_NAMES = [
   'Trans',
   'Interpolate',
+  NAMESPACE_COMPONENT,
 ];
 const FUNCTION_NAMES = [
   REACT_TRANSLATE_HOC_FUNC,
@@ -32,6 +35,7 @@ const FUNCTION_NAMES = [
 ];
 
 
+// eslint-disable-next-line no-unused-vars
 export default function ({ types: t }) {
   function evaluatePath(path) {
     const evaluated = path.evaluate();
@@ -42,7 +46,7 @@ export default function ({ types: t }) {
       '[React i18next] Messages must be statically evaluate-able for extraction.');
   }
 
-  function getMessageDescriptorKey(path) {
+  function getPropKey(path) {
     if (path.isIdentifier() || path.isJSXIdentifier()) {
       return path.node.name;
     }
@@ -50,7 +54,7 @@ export default function ({ types: t }) {
     return evaluatePath(path);
   }
 
-  function getMessageDescriptorValue(path) {
+  function getPropValue(path) {
     if (path.isJSXExpressionContainer()) {
       path = path.get('expression');
     }
@@ -71,10 +75,10 @@ export default function ({ types: t }) {
 
   function createMessageDescriptor(propPaths) {
     return propPaths.reduce((hash, [keyPath, valuePath]) => {
-      const key = getMessageDescriptorKey(keyPath);
+      const key = getPropKey(keyPath);
 
       if (EVALUABLE_PROPS.has(key)) {
-        return { ...hash, [key]: getMessageDescriptorValue(valuePath) };
+        return { ...hash, [key]: getPropValue(valuePath) };
       } else if (key === PLURAL_PROP) {
         return { ...hash, plural: true };
       }
@@ -145,6 +149,27 @@ export default function ({ types: t }) {
     return { ...hash, context: evaluatePath(contextPath) };
   }
 
+  function evaluateNSProps(propPaths) {
+    return propPaths.reduce((props, propPath) => {
+      switch (propPath.type) {
+        case 'FunctionExpression': {
+          throw propPath.buildCodeFrameError(
+            '[React i18next] Function prop is not supported.');
+        }
+        case 'ArrayExpression': {
+          return [...props, ...evaluatePath(propPath)];
+        }
+        case 'BinaryExpression':
+        case 'StringLiteral': {
+          return [...props, evaluatePath(propPath)];
+        }
+        default: {
+          return props;
+        }
+      }
+    }, []);
+  }
+
   function getMessageKeyValuePairs(descriptor) {
     const { context, plural, defaultValue = '' } = descriptor;
     const baseKey = descriptor[KEY_PROP] || defaultValue;
@@ -188,6 +213,17 @@ export default function ({ types: t }) {
     });
   }
 
+  function storeNamespaces(namespaces, path, state) {
+    const { opts } = state;
+    if (!namespaces.length) {
+      storeNamespace(DEFAULT_NS_KEY, opts.defaultNamespace, path, state);
+    } else {
+      namespaces.forEach((ns, idx) => {
+        storeNamespace(idx ? ns : DEFAULT_NS_KEY, ns, path, state);
+      });
+    }
+  }
+
   function decodeID(id, file, namespaceSeperator = DEFAULT_NS_SEPERATOR) {
     const namespaces = file.get(NAMESPACES);
     const seperator = namespaceSeperator;
@@ -229,14 +265,32 @@ export default function ({ types: t }) {
         if (referencesImport(name, moduleSourceName, COMPONENT_NAMES)) {
           const attributes = path.get('attributes')
             .filter(attr => attr.isJSXAttribute());
-          const descriptor = createMessageDescriptor(
-            attributes.map(attr => [attr.get('name'), attr.get('value')]));
-          const defaultValue = printMessage(getChildren(path));
+          if (referencesImport(name, moduleSourceName, [NAMESPACE_COMPONENT])) {
+            const propPaths = attributes
+              .filter(attr => getPropKey(attr.get('name')) === NS_PROP)
+              .map(attr => {
+                const attrPath = attr.get('value');
+                return attrPath.isJSXExpressionContainer() ?
+                  attrPath.get('expression') : attrPath;
+              });
+            const namespaces = evaluateNSProps(propPaths);
+            storeNamespaces(namespaces, path, state);
+          } else {
+            const descriptor = createMessageDescriptor(
+              attributes.map(attr => [attr.get('name'), attr.get('value')]));
 
-          storeMessage({ ...descriptor, defaultValue }, path, state);
+            const defaultValue = printMessage(getChildren(path));
+
+            storeMessage({ ...descriptor, defaultValue }, path, state);
+          }
+
+          // Tag the AST node so we don't try to extract it twice.
+          tagAsExtracted(path);
         }
       },
       CallExpression(path, state) {
+        if (wasExtracted(path)) return;
+
         const { opts } = state;
         const moduleSourceName = getModuleSourceName(opts);
         const callee = path.get('callee');
@@ -247,38 +301,18 @@ export default function ({ types: t }) {
           const calleeName = getCalleeName(path);
 
           if (calleeName === REACT_TRANSLATE_HOC_FUNC) {
-            if (!argumentPaths.length) {
-              storeNamespace(DEFAULT_NS_KEY, opts.defaultNamespace, path, state);
-            } else {
-              argumentPaths.forEach(a => {
-                switch (a.type) {
-                  case 'FunctionExpression': {
-                    throw path.buildCodeFrameError(
-                      '[React i18next] Function is not supported in translate HOC');
-                  }
-                  case 'ArrayExpression': {
-                    const nss = evaluatePath(a);
-                    nss.forEach((ns, idx) => {
-                      storeNamespace(idx ? ns : DEFAULT_NS_KEY,
-                        ns, path, state);
-                    });
-                    break;
-                  }
-                  default: {
-                    const ns = evaluatePath(a);
-                    storeNamespace(DEFAULT_NS_KEY,
-                      ns, path, state);
-                    break;
-                  }
-                }
-              });
-            }
+            const namespaces = evaluateNSProps(argumentPaths);
+            storeNamespaces(namespaces, path, state);
           }
+
+          // Tag the AST node so we don't try to extract it twice.
+          tagAsExtracted(path);
         }
 
         const isTranslationFunction = (
           getCalleeName(path) === TRANSLATE_FUNC_NAME);
         if (isTranslationFunction) {
+          // Evaluate all arguments called by the function
           const argPaths = path.get('arguments');
           const descriptor = argPaths.reduce((hash, arg, idx) => {
             switch (idx) {
@@ -301,34 +335,51 @@ export default function ({ types: t }) {
 
           storeMessage({ ...descriptor, defaultValue: descriptor.defaultValue },
             path, state);
+
+          // Tag the AST node so we don't try to extract it twice.
+          tagAsExtracted(path);
         }
       },
     },
     post(file) {
       // Get the plugin Options
-      const { opts: { locales, output, fs = defaultFs, namespaceSeperator } } = this;
+      const {
+        opts: { locales, output, fs = defaultFs, namespaceSeperator },
+      } = this;
 
       locales.forEach(locale => {
         const dir = p.join(process.cwd(), output, locale);
         fs.mkdirpSync(dir);
       });
 
-      const messages = [...file.get(MESSAGES).values()].reduce((hash, descriptor) => {
-        const { namespace, key } = decodeID(descriptor.key,
-          file, namespaceSeperator);
+      // Restructure messages with namespaces
+      const messages = [...file.get(MESSAGES).values()]
+        .reduce((hash, descriptor) => {
+          // Get namespace and key
+          const { namespace, key } = decodeID(descriptor.key,
+            file, namespaceSeperator);
 
-        const single = key ? _.set({}, key, descriptor.defaultValue) :
-          { [descriptor.defaultValue]: descriptor.defaultValue };
+          // create message hash
+          const msg = key ? _.set({}, key, descriptor.defaultValue) :
+            { [descriptor.defaultValue]: descriptor.defaultValue };
 
-        return _.merge({}, hash, { [namespace]: single });
-      }, {});
+          return _.merge({}, hash, { [namespace]: msg });
+        }, {});
 
+      // Write files into each locale predefined in options
       locales.forEach(locale => {
         _.forEach(messages, (value, namespace) => {
-          const filename = p.join(process.cwd(), output, locale, `${namespace}.json`);
+          // Use namespace as filename
+          const filename = p.join(process.cwd(), output,
+            locale, `${namespace}.json`);
+
+          // Merge the old translations
+          // Old translation always take priority
           const oldContent = fs.existsSync(filename) ?
             JSON.parse(fs.readFileSync(filename, 'UTF-8')) : {};
           const newContent = _.merge({}, value, oldContent);
+
+          // Format JSON output with 2 spaces
           const fileContent = JSON.stringify(newContent, null, 2);
           fs.writeFileSync(filename, fileContent);
         });
