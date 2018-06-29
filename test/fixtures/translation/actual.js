@@ -1,6 +1,6 @@
 /* eslint-disable */
 import React from 'react'
-import { translate, Trans, Interpolate } from 'react-i18next'
+import { translate } from 'react-i18next'
 
 
 class Test extends React.Component {

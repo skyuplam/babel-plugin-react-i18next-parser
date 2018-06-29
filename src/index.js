@@ -5,6 +5,7 @@ import _ from 'lodash';
 
 import printMessage from './printMessage';
 
+
 const KEY_PROP = 'i18nKey';
 const PLURAL_PROP = 'count';
 const CONTEXT_PROP = 'context';
@@ -31,7 +32,6 @@ const COMPONENT_NAMES = [
 ];
 const FUNCTION_NAMES = [
   REACT_TRANSLATE_HOC_FUNC,
-  TRANSLATE_FUNC_NAME,
 ];
 
 // Default Options
@@ -42,7 +42,6 @@ const defaultOptions = {
   moduleSourceName: 'react-i18next',
   locales: ['en'],
 };
-
 
 // eslint-disable-next-line no-unused-vars
 export default function ({ types: t }) {
@@ -111,6 +110,12 @@ export default function ({ types: t }) {
     }
 
     return importedNames.some(name => path.referencesImport(mod, name));
+  }
+
+  function hasReferencesImportBindings(path, mod, importedNames) {
+    const bindings = path.scope.getAllBindingsOfKind('module');
+    return importedNames.some(name =>
+      _.get(bindings, `${name}.path.parentPath.node.source.value`) === mod);
   }
 
   function tagAsExtracted(path) {
@@ -313,46 +318,45 @@ export default function ({ types: t }) {
         // react-i18next Module import functions, e.g. translate
         if (referencesImport(callee, moduleSourceName, FUNCTION_NAMES)) {
           const argumentPaths = path.get('arguments');
-          const calleeName = getCalleeName(path);
 
-          if (calleeName === REACT_TRANSLATE_HOC_FUNC) {
-            const namespaces = evaluateNSProps(argumentPaths);
-            storeNamespaces(namespaces, path, state);
-          }
-
+          const namespaces = evaluateNSProps(argumentPaths);
+          storeNamespaces(namespaces, path, state);
           // Tag the AST node so we don't try to extract it twice.
           tagAsExtracted(path);
         }
 
         const isTranslationFunction = (
           getCalleeName(path) === TRANSLATE_FUNC_NAME);
-        if (isTranslationFunction) {
-          // Evaluate all arguments called by the function
-          const argPaths = path.get('arguments');
-          const descriptor = argPaths.reduce((hash, arg, idx) => {
-            switch (idx) {
-              // Key argument
-              case 0: {
-                return evaluateTranslateKeyArg(arg, hash);
+        if (isTranslationFunction &&
+          hasReferencesImportBindings(path, moduleSourceName, FUNCTION_NAMES)) {
+          if (isTranslationFunction) {
+            // Evaluate all arguments called by the function
+            const argPaths = path.get('arguments');
+            const descriptor = argPaths.reduce((hash, arg, idx) => {
+              switch (idx) {
+                // Key argument
+                case 0: {
+                  return evaluateTranslateKeyArg(arg, hash);
+                }
+                // Options argument
+                case 1: {
+                  return evaluateTranslationOptsArg(arg, hash);
+                }
+                case 2: {
+                  return evaluateTranslationContextArg(arg, hash);
+                }
+                default: {
+                  return hash;
+                }
               }
-              // Options argument
-              case 1: {
-                return evaluateTranslationOptsArg(arg, hash);
-              }
-              case 2: {
-                return evaluateTranslationContextArg(arg, hash);
-              }
-              default: {
-                return hash;
-              }
-            }
-          }, {});
+            }, {});
 
-          storeMessage({ ...descriptor, defaultValue: descriptor.defaultValue },
-            path, state);
+            storeMessage({ ...descriptor, defaultValue: descriptor.defaultValue },
+              path, state);
 
-          // Tag the AST node so we don't try to extract it twice.
-          tagAsExtracted(path);
+            // Tag the AST node so we don't try to extract it twice.
+            tagAsExtracted(path);
+          }
         }
       },
     },
